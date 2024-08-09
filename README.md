@@ -300,7 +300,111 @@ public class TestStatement {
 
 
 
+### 2. SQL 注入攻击 ❤️ 
 
+#### （1）模拟登陆业务逻辑
+
+![image.png](assets/image5.png)
+
+![image.png](assets/image6.png)
+
+> SQL 注入攻击的产生，是由于使用 SQL 语句拼接的方式进行查询，其中的参数位置通过**字符串拼接**的方式形成 SQL 语句，可能导致特殊的语法使得命中查询
+
+原因：SQL 语句拼接
+
+#### （2）解决 SQL 攻击：PreparedStatement 预编译的方式获得 SQL 语句 ❤️ 
+
+> - PreparedStatement 接口继承自 Statement 接口，表示预编译的 SQL 语句对象
+> - `PreparedStatement preparedStatement = connection.prepareStatement(sql_model)` 允许接收一个带有参数缺省位（?）的SQL字符串
+>   > String sql_model = "insert into employees (code, name, age) values (?, ?, ?)";
+>   >
+> - `preparedStatement.setString(1, code);` 的方法传递参数
+
+> - 预编译带有缺省位（?）的 SQL 字符串，？位置的参数时固定的，不会产生因拼接而产生的歧义；
+> - SQL 模板编译后可以多次使用，比如一次插入多条数据，只要参数位置对得上；
+
+```java
+public class TestPreparedStatement {
+    public static void main(String[] args) {
+        Connection connection = DBUtil.getConnection();
+        String sql_model = "insert into employees (code, name, age) values (?, ?, ?)";
+        try {
+            // 预编译的方式获得 SQL 语句对象，需要先获得 SQL语句 模板
+            PreparedStatement preparedStatement = connection.prepareStatement(sql_model);
+            // 从键盘获取数据
+            Scanner sc = new Scanner(System.in);
+            System.out.println("输入编号：");
+            String code = sc.next();
+            System.out.println("输入姓名：");
+            String name = sc.next();
+            System.out.println("输入年龄：");
+            String age = sc.next();
+            // 填入数据; 参数索引位置从1开始
+            preparedStatement.setString(1, code);
+            preparedStatement.setString(2, name);
+            preparedStatement.setString(3, age);
+            int i = preparedStatement.executeUpdate();
+            if(i>0){
+                System.out.println("插入成功！");
+            } else {
+                System.out.println("插入失败！");
+            }
+            // 一个模板，多次插入
+            preparedStatement.setString(1, "1030");
+            preparedStatement.setString(2, "李火旺");
+            preparedStatement.setString(3, "23");
+            i = preparedStatement.executeUpdate();
+            if(i>0){
+                System.out.println("插入成功！");
+            } else {
+                System.out.println("插入失败！");
+            }
+            // 关闭资源
+            preparedStatement.close();
+            connection.close();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+}
+
+```
+
+#### 3. UUID的使用
+
+UUID：Universally Unique Identifier，通用唯一识别码；是一种在分布式系统中生成唯一标识符的方法。UUID 通常用于确保不同系统之间生成的标识符是唯一的，即使这些系统之间没有直接通信。
+
+> UUID 的特点：
+>
+> - 唯一性：每个 UUID 都是唯一的，几乎不可能出现重复;
+> - 无序性：UUID 之间没有固定的顺序关系;
+> - 跨平台：UUID 在不同的操作系统和编程语言中都可以生成和识别;
+> - 长度固定：标准的 UUID 由 32 个十六进制数字组成，通常分为五个部分显示，格式为 8-4-4-4-12 的 16 进制数字组合;
+
+数据库设计中，主键的选择：（每个数据项都有一个主键字段）
+
+> 1. 自然主键：跟业务逻辑有关，如学号；
+> 2. 代理主键：与业务逻辑无关
+>    1. 自动增长；（不安全）
+>    2. 随机唯一；（重复概率极小）
+
+```java
+public class TestUUID {
+    public static void main(String[] args) {
+//        System.out.println(UUID.randomUUID().toString()); // 7ddfef2b-b213-4a97-a7ce-0313457ec5f3
+        String sql = "insert into uuid values(?,?)";
+        for (int i = 0; i < 100; i++) {
+            DBUtil.executePreparedUpdate(sql, UUID.randomUUID().toString().replace("-",""), i);
+        }
+    }
+}
+```
+
+
+
+### 4. MySQL 数据类型与 Java 数据类型的对应关系
+
+![image.png](assets/image7.png)
 
 
 
