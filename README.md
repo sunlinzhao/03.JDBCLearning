@@ -406,6 +406,11 @@ public class TestUUID {
 
 ![image.png](assets/image7.png)
 
+> getstring()方法的通用性: 😕(用于读取数据)
+>
+> getstring()//通用方法,可以获取所有数据类型。适用于显示，所有的数据通过这种方法获取，都变成字符了，如果想要获取后再做其他计算，不能使用该通用方法
+
+
 
 222
 
