@@ -298,9 +298,7 @@ public class TestStatement {
 > 7. 关闭资源；
 > 8. 处理异常 SQLException；
 
-
-
-### 2. SQL 注入攻击 ❤️ 
+### 2. SQL 注入攻击 ❤️
 
 #### （1）模拟登陆业务逻辑
 
@@ -312,7 +310,7 @@ public class TestStatement {
 
 原因：SQL 语句拼接
 
-#### （2）解决 SQL 攻击：PreparedStatement 预编译的方式获得 SQL 语句 ❤️ 
+#### （2）解决 SQL 攻击：PreparedStatement 预编译的方式获得 SQL 语句 ❤️
 
 > - PreparedStatement 接口继承自 Statement 接口，表示预编译的 SQL 语句对象
 > - `PreparedStatement preparedStatement = connection.prepareStatement(sql_model)` 允许接收一个带有参数缺省位（?）的SQL字符串
@@ -370,7 +368,7 @@ public class TestPreparedStatement {
 
 ```
 
-#### 3. UUID的使用
+### 3. UUID的使用
 
 UUID：Universally Unique Identifier，通用唯一识别码；是一种在分布式系统中生成唯一标识符的方法。UUID 通常用于确保不同系统之间生成的标识符是唯一的，即使这些系统之间没有直接通信。
 
@@ -400,8 +398,6 @@ public class TestUUID {
 }
 ```
 
-
-
 ### 4. MySQL 数据类型与 Java 数据类型的对应关系
 
 ![image.png](assets/image7.png)
@@ -410,6 +406,249 @@ public class TestUUID {
 >
 > getstring()//通用方法,可以获取所有数据类型。适用于显示，所有的数据通过这种方法获取，都变成字符了，如果想要获取后再做其他计算，不能使用该通用方法
 
+### 5. Mysql 的 BLOB 数据类型
+
+MySQL中，使用 BloB 这种数据类型操纵二进制对象，它是一个可以存储大量数据的容器(图片、音乐、视频、文件等),能容纳不同大小的数据。
+
+> 在 mysql 数据库中，有四种 BloB 类型:
+>
+> - TinyBlob类型: 最大能容纳 255B 的数据;
+> - Blob类型: 最大能容纳 65KB 的数据;
+> - MediumBlob类型: 最大能容纳 16MB 的数据;
+> - LongBlob类型: 最大能容纳 4GB 的数据;
+
+在安全性要求更高的系统中，一般会使用 BloB 类型存储:
+
+> - 缺点：占用空间较大、如果数据比较大，导致数据库性能下降
+> - 优点：安全性更高
+
+#### （1）插入 BLOB 数据类型
+
+只能使用 PreparedStatement 预编译参数占位的方式；（因为无法完成SQL字符串拼接）
+
+> 出现如下异常：👍
+>
+> Packet for query is too large (6,389,101 > 4,194,304). You can change this value on the server bysetting the 'max allowed packet' variable.
+>
+> 原因：设置 MediumBlob 后最大存储16M，但是每个包大小上线是4M，所以这里报错；
+>
+> 解决：修改mysql配置文件my.ini文件，配置max_allowed_packet选项；`max_allowed_packet=16777216`
+
+![image.png](assets/image8.png)
+
+```java
+    public static void insert() throws FileNotFoundException {
+        // BLOB 数据插入
+        String sql = "insert into profile values(?, ?)";
+        String id = UUID.randomUUID().toString().replace("-", "");
+        FileInputStream fileInputStream = new FileInputStream("resource/image/5.png");
+        int i = DBUtil.executePreparedUpdate(sql, id, fileInputStream);
+        System.out.println(i>0?"成功！":"失败");
+    }
+```
+
+#### （2）查询读取 BLOB 数据类型
+
+```java
+    public static void query() throws SQLException, IOException {
+        // BLOB 数据读取
+        String sql = "select * from profile where id=?";
+        String id = "6b61ce4817da459b814dc57b27f902ba";
+        DBObject dbObject = DBUtil.executePreparedQuery(sql, id);
+        ResultSet resultSet = dbObject.getResultSet();
+        while (resultSet.next()) {
+            System.out.println(resultSet.getString(1));
+            Blob blob = resultSet.getBlob(2);
+            InputStream binaryStream = blob.getBinaryStream(); // 返回输入流
+            FileOutputStream fileOutputStream = new FileOutputStream("resource/image/6.jpg");
+            byte[] bytes = new byte[1024];
+            int len;
+            while ((len = binaryStream.read(bytes)) != -1) {
+                fileOutputStream.write(bytes, 0, len);
+            }
+            // 关闭流
+            binaryStream.close();
+            fileOutputStream.close();
+        }
+        // 关闭资源
+        DBUtil.close(dbObject);
+    }
+```
+
+### 6. JDBC 批处理操作
+
+> 批处理: 不是一个一个的处理要执行的语句，按批次去执行。当有十条sql语句要执行，一次向服务器发送一条sql去执行，效率是比较低的。处理的方案是使用批处理，一次向服务器发送多条sql语句，由服务器一次性处理。
+
+批处理针对数据更新(增加、删除、修改)语句，不处理查询的。
+
+#### （1）Statement 批处理
+
+相关方法：
+
+- void addBatch(String sql): 添加sql语句到批次中；
+- int[] executeBatch(): 执行批处理，返回影响行数数组；
+
+> - 当执行了批次之后，批次中的SQL语句就会被清空。再次调用执行批次时，之前在批次中的sql语句已经没有了。所以，相当于没有执行成功。😕
+> - 当批次中出现错误，后序的sql还是可以正常执行。😄
+
+- void clearBatch(): 清空已经添加到批次中的 SQL 语句；
+
+```java
+public class TestStatementBatch {
+    public static void main(String[] args) throws SQLException {
+        Connection connection = DBUtil.getConnection();
+        Statement statement = connection.createStatement();
+        // 批量插入10条数据
+        for (int i = 0; i < 10; i++) {
+            String id = UUID.randomUUID().toString().replace("-", "");
+            String sql = "INSERT INTO user VALUES ('" + id + "', " + i + ")";
+            statement.addBatch(sql);
+        }
+        int[] ints = statement.executeBatch();
+        System.out.println(Arrays.toString(ints));
+        DBUtil.close(connection);
+        DBUtil.close(statement);
+    }
+}
+```
+
+#### （2）PreparedStatement 批处理
+
+> 每个 PreparedStatement 对象都绑定一条 SQL 模板，向 PreparedStatement 中添加批次操作，实际不是填加 sql 语句，而是为问号占位赋值。
+
+##### 提高批处理效率的两个点：❤️❤️❤️❤️❤️
+
+1. 手动提交 ❤️
+
+> 必须将自动提交关闭，数据处理异常回滚时可保证提交前的操作处于同一事务，保证回滚成功。
+
+- connection.setAutoCommit(false): 将自动提交设为假；默认 true 为自动提交，若为自动提交，每执行一条语句就提交一次，效率较低；
+- connection。commit(): 手动提交，可以等批次每一条语句都执行完毕，统一提交一次，效率较高；
+
+2. 设置连接参数 ❤️
+
+mysql的 jdbc 驱动默认情况下，无视 executeBatch() 语句。希望使用批次执行，在 url 地址后面加入 rewriteBatchedStatements=true 设置；
+
+> 数据库连接URL添加参数：`jdbc:mysql://localhost:3306/JDBC?rewriteBatchStatements=true`；可以让数据库识别 JDBC 的批处理操作，实现真正的批处理
+
+3. PreparedStatement 效率高于 Statement
+
+```java
+public class TestPreparedStatementBatch {
+    public static void main(String[] args) throws SQLException {
+        // 获取连接 jdbc:mysql://localhost:3306/JDBC?rewriteBatchStatements=true
+        Connection connection = DBUtil.getConnection();
+        connection.setAutoCommit(false); // 关闭自动提交
+        // 提供 sql 模板
+        String sql = "insert into user values(?,?)";
+        // 获取 Statement
+        PreparedStatement preparedStatement = connection.prepareStatement(sql);
+        // 循环填入参数
+        for (int i = 11; i < 201; i++) {
+            preparedStatement.setString(1, UUID.randomUUID().toString().replace("-", ""));
+            preparedStatement.setInt(2, i);
+            preparedStatement.addBatch();
+        }
+        // 执行批次
+        int[] ints = preparedStatement.executeBatch();
+        System.out.println(Arrays.toString(ints));
+        // 手动提交
+        connection.commit();
+        // 关闭资源
+        DBUtil.close(connection);
+        DBUtil.close(preparedStatement);
+    }
+}
+```
+
+### 7. 数据连接池
+
+是一个容器，持有多个数据库连接。当程序需要操作数据库的时候，直接可以从池中取出连接，使用完成之后，再放回到池中。
+
+> 1. 节省资源。如果每次访问数据库，都需要创建新的连接，在使用完成后，再去销毁连接，都是比较耗费系统资源的;
+> 2. 响应更高效。节省了创建和销毁的时间;
+> 3. 统一管理数据库连接，避免因为业务膨胀，导致数据库连接增多;
+> 4. 对性能各方面进待监控;
+
+市场上的连接池技术：
+
+> 开源的连接池技术：
+>
+> 1. C3P0 (古老)
+> 2. DBCP (DataBase Connection Pool)，是 tomcat 里 apache 提供的
+> 3. Druid （阿里开源）👍
+> 4. HiKariCP (Spring 默认，号称最快)
+
+![image.png](assets/image9.png)
+
+#### （1）Druid (德鲁伊)的使用
+
+```java
+public class TestDruid {
+    public static void main(String[] args) throws SQLException {
+        Connection connection;
+        try (DruidDataSource druidDataSource = new DruidDataSource()) {
+            // 连接配置
+            druidDataSource.setDriverClassName("com.mysql.cj.jdbc.Driver");
+            druidDataSource.setUrl("jdbc:mysql:/localhost:3306/JDBC");
+            druidDataSource.setUsername("root");
+            druidDataSource.setPassword("root");
+            // 连接池配置
+            druidDataSource.setInitialSize(5); // 连接池创建的时候，自动创建的数据库连接数量
+            druidDataSource.setMinIdle(10); // 最小空闲连接数
+            druidDataSource.setMaxActive(20); // 最大同时激活连接数量
+            druidDataSource.setMaxWait(6000); // 最大等待时间，以毫秒为单位，-1表示无限等待
+
+            // DruidPooledConnection 类实现了 Connection
+            // DruidPooledConnection connection = druidDataSource.getConnection();
+            connection = druidDataSource.getConnection();
+        }
+        System.out.println(connection);
+    }
+}
+```
+
+#### （2）HikariCP 的使用
+
+![image.png](assets/image10.png)
+
+> 上述错误，表明 HikariCP 需要使用到其它库 slf4j 库，因此需要把 slf4j 库导入进来。（HikariCP库 依赖于 slf4j库）
+
+![image.png](assets/image11.png)
+
+> 上述输出，连接成功，确实需要用到 slf4j 库；
+
+```java
+public class TestHikariCP {
+    public static void main(String[] args) {
+        try (HikariDataSource dataSource = new HikariDataSource()) {
+            // 连接配置
+            dataSource.setDriverClassName("com.mysql.cj.jdbc.Driver");
+            dataSource.setJdbcUrl("jdbc:mysql://localhost:3306/JDBC");
+            dataSource.setUsername("root");
+            dataSource.setPassword("root");
+            // 连接池配置
+            dataSource.setMinimumIdle(10); // 最小空闲连接数
+
+            Connection connection = dataSource.getConnection();
+            System.out.println(connection);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+}
+```
+
+#### （3）在数据库工具类中使用连接池
+
+反射 + 读取配置文件，获取连接后的操作与直接连接相同
+
+（略）
 
 
-222222
+
+
+
+
+
+22222

@@ -1,5 +1,6 @@
 package com.jdbc.util;
 
+import java.lang.reflect.Method;
 import java.sql.*;
 import java.util.ResourceBundle;
 
@@ -15,6 +16,7 @@ public class DBUtil {
     private static final String PASSWORD;
     private static final String DRIVER;
     private static final String URL;
+    private static final String POOL; // 连接池
 
     static { // 静态代码块，用于加载类时，读取配置
         ResourceBundle resourceBundle = ResourceBundle.getBundle("db");
@@ -22,6 +24,7 @@ public class DBUtil {
         PASSWORD = resourceBundle.getString("mysql.password");
         DRIVER = resourceBundle.getString("mysql.driver");
         URL = resourceBundle.getString("mysql.url");
+        POOL = resourceBundle.getString("pool.class"); // 连接池
     }
 
     /**
@@ -39,6 +42,39 @@ public class DBUtil {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * 通过连接池获取连接
+     * @return Connection
+     */
+    public static Connection getConnectionPool(){
+        try {
+            Class<?> aClass = Class.forName(POOL);
+            Object o = aClass.getConstructor().newInstance();
+
+            Method setDriverClassName = aClass.getMethod("setDriverClassName", String.class);
+            setDriverClassName.invoke(o, DRIVER);
+            if(POOL.contains("DruidDataSource")){
+                Method setUrl = aClass.getMethod("setUrl", String.class); // getMethod() 可以访问从父类继承但不能访问私有，getDeclaredMethod 相反
+                setUrl.invoke(o, URL);
+            } else if(POOL.contains("HikariDataSource")){
+                Method setJdbcUrl = aClass.getMethod("setJdbcUrl", String.class);
+                setJdbcUrl.invoke(o, URL);
+            }
+            Method setUsername = aClass.getMethod("setUsername", String.class);
+            setUsername.invoke(o, USER);
+            Method setPassword = aClass.getMethod("setPassword", String.class);
+            setPassword.invoke(o, PASSWORD);
+
+            Method getConnection = aClass.getMethod("getConnection");
+            Object invoke = getConnection.invoke(o);
+
+            return (Connection) invoke;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
     /**
@@ -102,6 +138,30 @@ public class DBUtil {
      */
     public static int executePreparedUpdate(String sql, Object...args){
         Connection connection = getConnection();
+        PreparedStatement preparedStatement = null;
+        try {
+            preparedStatement = connection.prepareStatement(sql);
+            int i = 1;
+            for (Object arg : args) {
+                preparedStatement.setObject(i++, arg);
+            }
+            return preparedStatement.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        } finally {
+            close(preparedStatement);
+            close(connection);
+        }
+    }
+
+    /**
+     * 连接池连接执行
+     * @param sql String
+     * @param args Object...
+     * @return int
+     */
+    public static int executePreparedUpdatePool(String sql, Object...args){
+        Connection connection = getConnectionPool();
         PreparedStatement preparedStatement = null;
         try {
             preparedStatement = connection.prepareStatement(sql);

@@ -34,7 +34,7 @@ public class TestConnection {
         properties.setProperty("password", "root");
         // 通过 java 连接数据库 协议
         // 协议:数据库://地址:端口号/数据库名
-        String url = "jdbc:mysql://8.130.102.188:3306/JDBC";
+        String url = "jdbc:mysql://localhost:3306/JDBC";
         Connection connect = driver.connect(url, properties);
         System.out.println(connect);
     }
@@ -48,7 +48,7 @@ public class TestConnection {
         Properties properties = new Properties();
         properties.setProperty("user", "root");
         properties.setProperty("password", "root");
-        String url = "jdbc:mysql://8.130.102.188:3306/JDBC";
+        String url = "jdbc:mysql://localhost:3306/JDBC";
         Connection connect = driver.connect(url, properties);
         System.out.println(connect);
     }
@@ -58,14 +58,14 @@ public class TestConnection {
         // 强转为 java.sql.Driver
         Driver driver = (Driver) o;
         DriverManager.registerDriver(driver);
-        String url = "jdbc:mysql://8.130.102.188:3306/JDBC";
+        String url = "jdbc:mysql://localhost:3306/JDBC";
         Connection connection = DriverManager.getConnection(url, "root", "root");
         System.out.println(connection);
     }
     // 获取连接方式四：静态代码块注册
     public static void getConnection4() throws Exception {
         // 提供URL地址
-        String url = "jdbc:mysql://8.130.102.188:3306/JDBC";
+        String url = "jdbc:mysql://localhost:3306/JDBC";
         // 加载驱动
         // com.mysql.cj.jdbc.Driver 有一个静态代码块，在类加载时会被执行，注册到驱动管理，因此不需要再次注册
         Class.forName("com.mysql.cj.jdbc.Driver");
