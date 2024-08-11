@@ -1,5 +1,9 @@
 # JDBCLearning
 
+# JDBC part 1
+
+
+
 数据持久化处理：
 
 1. 存储磁盘文件，使用IO流；
@@ -645,10 +649,366 @@ public class TestHikariCP {
 
 （略）
 
+### 8. 存储过程
 
+> 存储过程: 在大型数据库系统中，一组为了完成特定功能的 SQL 语句集，它存储在数据库中，一次编译后永久有效。用户通过指定存储过程名字，并给出参数来执行。
 
+优点: ❤️
 
+- 重复使用: 从而减少数据库开发人员的工作量;
+- 提高性能: 一旦编译成功后，下次再使用就不需要编译。一般的SQL语句，每执行一次需要编译一次，所以使用存储过程效率更高;
+- 减少网络流量: 存储过程存储于数据库服务器上，调用的时候只需要传递存储过程名称及参数，降低网络传输的数据量;
+- 安全性: 参数化的存储过程可以防止SQL注入攻击，而且可以将 Grant、Deny以及Revoke 权限应用于存储过程;
 
+缺点：
 
+- 移植性较差
+- 不便于调式和维护
 
-22222
+#### （1）使用JDBC调用存储过程
+
+##### a. 无参数
+
+- 创建存储过程
+
+```sql
+create procedure noparam()
+begin
+    select * from user;
+end;
+```
+
+- 调用
+
+```sql
+call noparam();
+```
+
+- JDBC 调用无参存储过程
+
+connection 调用 CallableStatement prepareCall(String sql) :
+
+> CallableStatement 接口继承自 PreparedStatement 接口，PreparedStatement 接口继承自 Statement 接口；
+
+❤️ 存储过程调用 SQL 字符串写法：`String sql = "{call noparam()}";`，语句两端加上大括号； ❤️
+
+```java
+public class TestNoParam {
+    public static void main(String[] args) throws SQLException {
+        // 获取连接
+        Connection connection = DBUtil.getConnection();
+        String sql = "{call noparam()}";
+        CallableStatement callableStatement = connection.prepareCall(sql);
+        boolean execute = callableStatement.execute(); // 调用存储过程无论是更新还是查询都可以
+        ResultSet resultSet = callableStatement.getResultSet(); // 获取结果集
+        while (resultSet.next()){
+            System.out.println(resultSet.getString(1));
+        }
+        DBUtil.close(connection);
+        DBUtil.close(callableStatement);
+        DBUtil.close(resultSet);
+    }
+}
+```
+
+##### b. 有入参
+
+- 创建存储过程
+
+```sql
+create procedure inparam(n int)
+begin
+    select * from user where name=n;
+end;
+```
+
+- 调用
+
+```sql
+call inparam(2);
+```
+
+- JDBC 调用有入参存储过程
+
+```java
+public class TestInParam {
+    public static void main(String[] args) throws SQLException {
+        Connection connection = DBUtil.getConnection();
+        String sql = "{call inparam(?)}";
+        CallableStatement callableStatement = connection.prepareCall(sql);
+        callableStatement.setInt(1, 2);
+        boolean execute = callableStatement.execute();
+        ResultSet resultSet = callableStatement.getResultSet();
+        while (resultSet.next()){
+            System.out.println(resultSet.getString(1));
+        }
+        DBUtil.close(connection);
+        DBUtil.close(callableStatement);
+        DBUtil.close(resultSet);
+    }
+}
+```
+
+##### c. 有出参
+
+- 创建存储过程
+
+```sql
+create procedure outparam(in n int, out i varchar(50))
+begin
+    set i = (select id from user where name = n);
+end;
+```
+
+- 调用
+
+```sql
+call outparam(2, @xx);
+select @xx;
+```
+
+- JDBC 调用有出参存储过程
+
+```java
+public class TestOutParam {
+    public static void main(String[] args) throws SQLException {
+        Connection connection = DBUtil.getConnection();
+        String sql = "{call outparam(?, ?)}";
+        CallableStatement callableStatement = connection.prepareCall(sql);
+        callableStatement.setInt(1, 2); // 入参
+        // 对应out参数的处理，标注参数类型
+        callableStatement.registerOutParameter(2, Types.VARCHAR);
+        boolean execute = callableStatement.execute();
+        String string = callableStatement.getString(2); // 出参
+        System.out.println(string);
+        DBUtil.close(connection);
+        DBUtil.close(callableStatement);
+    }
+}
+```
+
+##### d. INOUT 参数
+
+- 创建存储过程
+
+```sql
+create procedure inoutparam(inout x int)
+begin
+    set x = x*10;
+end;
+```
+
+- 调用
+
+```sql
+set @x=5;
+call inoutparam(@x);
+select @x;
+```
+
+- JDBC 调用 INOUT 参数存储过程
+
+```java
+public class TestInOutParam {
+    public static void main(String[] args) throws SQLException {
+        Connection connection = DBUtil.getConnection();
+        String sql = "{call inoutparam(?)}";
+        CallableStatement callableStatement = connection.prepareCall(sql);
+        callableStatement.setInt(1, 5);
+        callableStatement.registerOutParameter(1, Types.INTEGER);
+        callableStatement.execute();
+        int anInt = callableStatement.getInt(1);
+        System.out.println(anInt);
+        DBUtil.close(connection);
+        DBUtil.close(callableStatement);
+    }
+}
+```
+
+##### e. 返回多个结果集
+
+- 构建存储过程
+
+```sql
+create procedure multi_result_set(x int)
+begin
+    select * from user where name=x;
+    select * from user where name=2*x;
+    select * from user where name=3*x;
+end;
+```
+
+- 调用
+
+```sql
+call multi_result_set(2);
+```
+
+- JDBC 调用返回多个结果集存储过程
+
+```java
+public class TestMultiResult {
+    public static void main(String[] args) throws SQLException {
+        Connection connection = DBUtil.getConnection();
+        String sql = "{call multi_result_set(?)}";
+        CallableStatement callableStatement = connection.prepareCall(sql);
+        callableStatement.setInt(1, 2);
+        callableStatement.execute();
+        ResultSet resultSet = callableStatement.getResultSet(); // 获取下一个结果集
+        while (resultSet.next()){
+            System.out.println(resultSet.getString(1));
+        }
+        // 先获取一次结果集，然后再判断是否还有更多结果集
+        while (callableStatement.getMoreResults()){ // 判断是否还有更多结果集
+            System.out.println("------------");
+            resultSet = callableStatement.getResultSet(); // 获取下一个结果集
+            ResultSetMetaData metaData = resultSet.getMetaData();
+            int columnCount = metaData.getColumnCount(); // 获取列数
+            while (resultSet.next()){ // 判断当前结果集是否还有更多数据
+                System.out.println(resultSet.getString(1));
+            }
+            // 关闭结果集
+            DBUtil.close(resultSet);
+        }
+        // 关闭资源
+        DBUtil.close(connection);
+        DBUtil.close(callableStatement);
+    }
+}
+```
+
+### ❤️ execute、executeQuery、executeUpdate 区别
+
+- execute:
+  - 方法用来执行任意的sql语句, 如果执行的结果是 ResultSet，返回 true, 否则就是 false;
+  - 通过 getResultSet 来获取 ResultSet，也可以通过 getMoreResults 方法，获取多个结果集;
+  - 如果操作的是 DML 语句，可以调用 getUpdatecount 方法，获取影响数据库的行数;
+- executeQuery: 用来执行 select 查询处理，返回 ResultSet，即使查询不到记录，resultSet 也不为 null，只是next()方法会返回 false
+- executeUpdate: 用来执行 insert、update、delete 等 DML 语句，返回结果是int类型，也就是对数据库影响的行数。也可以操作DDL, 返回0
+
+#### （2）可滚动结果集
+
+> 可滚动结果集:结果集的光标，既可以向上滚动，也可以向下滚动，则称为是可滚动的结果集，如果只能向下滚动，则称为不可滚动结果集。
+>
+> 默认情况下，结果集不可滚动。
+
+```java
+Resultset.TYPE_FORWARD_ONLY 默认情况，值为1003，表示不可滚动
+Resultset.TYPE_SCROLL_INSENSITIVE 值为1004，可滚动结果集，结果集不会跟随数据库的数据变化而改变
+Resultset.TYPE_SCROLL_SENSITIVE 值为1005, 可滚动结果集，结果集会跟随数据库的数据变化而改变 (MYSQL不支持)
+Resultset.CONCUR_READ_ONLY 值为1007, 结果集只读的，不能通过修改结果集而反向去更新数据库
+ResultSet.CONCUR_UPDATABLE 值为1008， 结果集可更新，可以通过修改结果集而反向去更新数据库
+```
+
+绝对位移：
+
+- resultSet.beforeFirst()：把结果集光标放到第一行的前面，也就是默认位置；
+- resultSet.afterLast()：把结果集光标放到最后一行的后面；
+- boolean b = resultSet.first()：把光标放到第一行位置上；
+- boolean b1 = resultSet.last()：把光标放到最后一行位置；
+- boolean b = resultSet.absolute(4)：绝对位移，把光标移动到给定行的位置上；
+
+相对位移：
+
+- resultSet.last()：把光标在当前行的位置向下移动一位；
+- resultSet.previous()：把光标在当前行的位置向上移动一位；
+- resultSet.relative(-2)：表示相对位移, 正数表示向下移动，负数表示向上移动；
+- resultSet.getRow()： 获取光标所在行；
+
+可更新结果集：
+
+- resultSet.updateString(2,"白居易");
+- resultSet.updateString(3,"女");
+- resultSet.updateRow();
+
+```java
+public class TestScrollResultSet {
+    public static void main(String[] args) throws SQLException {
+        Connection connection = DBUtil.getConnection();
+        String sql = "select * from user";
+        // 设置结果集可滚动可更新
+        Statement statement = connection.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_UPDATABLE);
+        ResultSet resultSet = statement.executeQuery(sql);
+        resultSet.next(); // 向后移动
+        System.out.println(resultSet.getString(1));
+        resultSet.next(); // 向后移动
+        System.out.println(resultSet.getString(1));
+        System.out.println(resultSet.getRow()); // 获取当前行
+        resultSet.afterLast(); // 设置最后一行之后
+        resultSet.previous(); // 向前移动
+        System.out.println(resultSet.getString(1));
+        resultSet.updateInt(2, 6666); // 更新当前行
+        resultSet.updateRow(); // 提交更新，数据库也会更新
+
+        DBUtil.close(resultSet);
+        DBUtil.close(statement);
+        DBUtil.close(connection);
+    }
+}
+```
+
+#### （3）JDBC 调用自定义函数
+
+- 创建函数
+
+```sql
+delimiter $$
+create function func1(x int)
+    returns varchar(50) -- 返回值类型
+    reads sql data -- 是 MySQL 存储过程和函数中的一种权限修饰符，用于标识该存储过程或函数只读取数据库的数据而不修改它
+begin
+    declare result_id varchar(50); -- 声明变量
+    select id into result_id from user where name=x;
+    return result_id;
+end$$
+delimiter ;
+```
+
+- 调用
+
+```sql
+select func1(2);
+```
+
+- JDBC 调用函数
+
+```java
+public class TestFunc {
+    public static void main(String[] args) throws SQLException {
+        Connection connection = DBUtil.getConnection();
+        String sql = "{?=call func1(?)}"; // 函数调用
+        CallableStatement callableStatement = connection.prepareCall(sql);
+        callableStatement.registerOutParameter(1, Types.VARCHAR);
+        callableStatement.setInt(2, 2);
+        boolean execute = callableStatement.execute();
+        String string = callableStatement.getString(1);
+        System.out.println(string);
+        DBUtil.close(connection);
+        DBUtil.close(callableStatement);
+    }
+}
+```
+
+> 注意：JDBC调用函数也用`call`，只不过返回值放在等号左边，用？占位
+>
+> `String sql = "{?=call func1(?)}"; // 函数调用`
+
+⭐️ 用“预编译查询”的方法同样可以调用函数：`String sql = "select func1(?)";`
+
+```java
+public class Test {
+    public static void main(String[] args) throws SQLException {
+        Connection connection = DBUtil.getConnection();
+        String sql = "select func1(?)";
+        PreparedStatement preparedStatement = connection.prepareStatement(sql);
+        preparedStatement.setInt(1,2);
+        ResultSet resultSet = preparedStatement.executeQuery();
+        while (resultSet.next()){
+            System.out.println(resultSet.getString(1));
+        }
+        DBUtil.close(connection);
+        DBUtil.close(preparedStatement);
+        DBUtil.close(resultSet);
+    }
+}
+```
