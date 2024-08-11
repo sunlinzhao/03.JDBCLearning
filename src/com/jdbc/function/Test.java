@@ -25,5 +25,6 @@ public class Test {
         DBUtil.close(connection);
         DBUtil.close(preparedStatement);
         DBUtil.close(resultSet);
+
     }
 }
