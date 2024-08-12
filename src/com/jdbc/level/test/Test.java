@@ -36,6 +36,5 @@ public class Test {
         UserDaoImpl userDao = new UserDaoImpl();
         User user1 = userDao.selectById("b0947adcca8f4d60a8396ef66c0909f0");
         System.out.println(user1);
-
     }
 }
